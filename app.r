@@ -72,10 +72,13 @@ ui <- fluidPage(
                                         min = min(Top_phone_data$year),
                                         max = max(Top_phone_data$year),
                                         value = c(min(Top_phone_data$year), max(Top_phone_data$year)),
-                                        step = 1)
+                                        step = 1),
+                            
                           ),
+                          
                           mainPanel(
-                            plotOutput("Dominance_plot")
+                            plotOutput("Dominance_plot"),
+                            
                           )
                         )
                )
@@ -85,6 +88,7 @@ ui <- fluidPage(
       "Compare Phones",
       sidebarLayout(
         sidebarPanel(
+          h3(strong("Select 1st Phone")),
           selectInput("compare_brand1",
                              "Select Brand: ",
                              choices = unique(MainData$brand),
@@ -98,7 +102,7 @@ ui <- fluidPage(
                       "Select Model: ",
                       choices = NULL),
        
-        "Select 2nd Phone",
+          h3(strong("Select 2nd Phone")),
           selectInput("compare_brand2",
                              "Select Brand: ",
                              choices = unique(MainData$brand),
@@ -114,7 +118,12 @@ ui <- fluidPage(
         
         ),
         mainPanel(
-          
+          fluidRow(
+            column(6, plotOutput("compare_image1")),  
+            column(6, plotOutput("compare_image2"))   
+          ),
+          br(),
+          dataTableOutput("compare_table")
         )
       )
     )
@@ -150,7 +159,6 @@ server <- function(input, output, session) {
     
     # Set proper column names (the original row names become new column headers)
     rownames(Values) <- c("Brand", "Model Name", "Release Year", "Body Detail", "OS Type", "Storage", "Display Size", "Display Resolution", "Camera", "Video", "RAM", "Chipset", "Battery", "Battery Type")
-    
     # Set row names as the original column names (to represent the fields)
     transposed_data <- cbind(Features = rownames(Values), Values = Values)
     colnames(transposed_data) <- c("Features", "Values")
@@ -216,19 +224,84 @@ server <- function(input, output, session) {
       theme_minimal() +
       theme(legend.position = "bottom")
   })
+  output$Box_plot<-renderPlot({
+    
+    unique_values <- unique(MainData$`battery_size....battery_sizes`)
+    print(unique_values)
+    
+    # Clean and parse the battery size column with more checks
+    # Remove non-numeric characters and convert to numeric
+    MainData$battery_size <- suppressWarnings(as.numeric(gsub("[^0-9]", "", MainData$`battery_size....battery_sizes`)))
+    
+    # Print the number of NA values after conversion for diagnosis
+    cat("Number of NA values in battery_size after parsing: ", sum(is.na(MainData$battery_size)), "\n")
+    
+    # Filter out rows with missing or invalid battery size data
+    battery_data <- data %>% filter(!is.na(battery_size))
+    
+    # If the number of valid rows is too low, print a message
+    if (nrow(battery_data) == 0) {
+      cat("No valid rows found for battery size.\n")
+    } else {
+      # Create the box plot using ggplot2
+      ggplot(battery_data, aes(x = brand_name, y = battery_size)) +
+        geom_boxplot(fill = "steelblue", color = "black") +
+        theme_minimal() +
+        labs(
+          title = "Distribution of Battery Sizes by Brand",
+          x = "Brand Name",
+          y = "Battery Size (mAh)"
+        ) +
+        theme(
+          axis.text.x = element_text(angle = 45, hjust = 1)
+        )
+  
+  }
+    })
   observeEvent(list(input$compare_brand1, input$compare_year1), {
-    updateSelectInput(session, "model", 
+    updateSelectInput(session, "compare_model1", 
                       choices = subset(MainData, 
                                        MainData$brand %in% input$compare_brand1 & 
                                          MainData$release_date <= input$compare_year1[2] & 
                                          MainData$release_date >= input$compare_year1[1])$device_name)
   })
   observeEvent(list(input$compare_brand2, input$compare_year2), {
-    updateSelectInput(session, "model", 
+    updateSelectInput(session, "compare_model2", 
                       choices = subset(MainData, 
                                        MainData$brand %in% input$compare_brand2 & 
                                          MainData$release_date <= input$compare_year2[2] & 
                                          MainData$release_date >= input$compare_year2[1])$device_name)
+  })
+  output$compare_image1 <- renderPlot({
+    selected_image1 <- MainData$image_link[which(MainData$device_name == input$compare_model1)]
+    if (length(selected_image1) > 0) {
+      plot(image_read(selected_image1))
+    }
+  })
+  output$compare_image2 <- renderPlot({
+    selected_image2 <- MainData$image_link[which(MainData$device_name == input$compare_model2)]
+    if (length(selected_image2) > 0) {
+      plot(image_read(selected_image2))
+    }
+  })
+  output$compare_table <- renderDataTable({
+    my_data <- MainData %>% select(-c(phone_url, device_id, image_link))
+    
+    my_data1 <- my_data[which(my_data$device_name == input$compare_model1),]
+    my_data2<- my_data[which(my_data$device_name == input$compare_model2),]
+    
+    # Transpose the data and convert it back to a data frame
+    Values1 <- as.data.frame(t(my_data1), stringsAsFactors = FALSE)
+    Values2 <- as.data.frame(t(my_data2), stringsAsFactors = FALSE)
+    
+    rownames(Values1) <- rownames(Values2) <- c("Brand", "Model Name", "Release Year", "Body Detail", "OS Type", "Storage", "Display Size", "Display Resolution", "Camera", "Video", "RAM", "Chipset", "Battery", "Battery Type")
+    
+    # Combine both data frames into a single table for side-by-side comparison
+    compare_phones_data <- cbind(Features = rownames(Values1), Phone1 = Values1[, 1], Phone2 = Values2[, 1])
+    colnames(compare_phones_data) <- c("Features", "Phone 1", "Phone 2")
+    
+    
+    compare_phones_data  # Return the transposed data frame
   })
 }
 
