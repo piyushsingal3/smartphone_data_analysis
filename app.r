@@ -14,7 +14,7 @@ Top_phone_data <- read.csv("top_20_phones_2017-2023.csv")
 
 ui <- fluidPage(
   theme = shinytheme("darkly"),
-  titlePanel("Smartphone Master"),
+  titlePanel("Smartphone Data Analysis"),
   
   tabsetPanel(
     tabPanel("All Phones",
