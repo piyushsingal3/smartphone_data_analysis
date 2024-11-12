@@ -14,7 +14,7 @@ Top_phone_data <- read.csv("top_20_phones_2017-2023.csv")
 
 ui <- fluidPage(
   theme = shinytheme("darkly"),
-  titlePanel("Smartphone Data Analysis"),
+  titlePanel("Smartphone Master"),
   
   tabsetPanel(
     tabPanel("All Phones",
@@ -77,7 +77,16 @@ ui <- fluidPage(
                           ),
                           
                           mainPanel(
+                            h2("Top Brand Year by Year"),
                             plotOutput("Dominance_plot"),
+                            h2("SIM Card Trend"),
+                            plotOutput("Sim_plot"),
+                            h2("Weight Trend"),
+                            plotOutput("Weights"),
+                            h2("Weight VS Battery Size"),
+                            plotOutput("WBS"),
+                            h2("Battery Size"),
+                            plotOutput("BatSize"),
                             
                           )
                         )
@@ -224,6 +233,42 @@ server <- function(input, output, session) {
       theme_minimal() +
       theme(legend.position = "bottom")
   })
+  output$Sim_plot <- renderPlot({
+    gg_plot_data <- Top_phone_data %>%
+      mutate(sim = sub(" .*", "", sim)) %>%
+      group_by(year, sim) %>%
+      summarise(phone_count = n()) %>%
+      ungroup()
+    
+    
+    ggplot(gg_plot_data, aes(x = year, y = phone_count, color = sim, group = sim)) +
+      geom_line(size = 0.5) +
+      geom_point(size = 2) +
+      labs(x = "Year", y = "Number of Phones", color = "SIM") +
+      theme_minimal() +
+      theme(legend.position = "bottom")
+  })
+  output$Weights <- renderPlot({
+    gg_plot_data <- Top_phone_data %>%
+      mutate(weight = sub(" .*","",weight))
+    
+    plot(gg_plot_data$weight, xlab="Year", ylab="Weight",xaxt="n", pch=16)
+  })
+  output$WBS <- renderPlot({
+    gg_plot_data <- Top_phone_data %>%
+      mutate(weight = sub(" .*","",weight))
+    
+    
+    ggplot(gg_plot_data, aes(x = battery_size....battery_sizes, y = weight)) +
+      geom_point(size = 2) +
+      labs(x = "Battery Size", y = "Weight")
+  })
+  output$BatSize <- renderPlot({
+    ggplot(Top_phone_data, aes(x = year, y = battery_size....battery_sizes)) + 
+      stat_summary(fun = "mean", geom = "bar", fill = "lightblue", color = "black") + 
+      labs(title = "Average Battery Size by Year", x = "Year", y = "Average Battery Size (mAh)")
+  })
+  
   output$Box_plot<-renderPlot({
     
     unique_values <- unique(MainData$`battery_size....battery_sizes`)
@@ -307,3 +352,4 @@ server <- function(input, output, session) {
 
 # Run the application 
 shinyApp(ui = ui, server = server)
+
