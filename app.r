@@ -10,11 +10,67 @@ MainData <- read.csv("complete_phones_data.csv")
 MainData$release_date <- as.numeric(MainData$release_date)
 MainData <- subset(MainData, !is.na(MainData$release_date))
 Top_phone_data <- read.csv("top_20_phones_2017-2023.csv")
+phones_data <- MainData %>%
+  mutate(
+    os_category = case_when(
+      grepl("iOS", os_type, ignore.case = TRUE) ~ "iOS",
+      grepl("Android", os_type, ignore.case = TRUE) ~ "Android",
+      grepl("HarmonyOS", os_type, ignore.case = TRUE) ~ "HarmonyOS",
+      grepl("EMUI", os_type, ignore.case = TRUE) ~ "EMUI",
+      TRUE ~ "Other"
+    ),
+    release_date_numeric = as.numeric(release_date),
+    storage_numeric = sapply(storage, function(x) {
+      if (is.na(x) || x == "") return(NA)
+      x_clean <- gsub(" storage.*", "", x)
+      storage_values <- as.numeric(gsub("[^0-9]", "", unlist(strsplit(x_clean, "/"))))
+      max(storage_values, na.rm = TRUE)
+    }),
+    display_size_numeric = as.numeric(gsub("\"", "", display_size)),
+    camera_numeric = as.numeric(gsub("[^0-9]", "", gsub("MP.*", "", camera))),
+    ram_numeric = sapply(ram, function(x) {
+      if (is.na(x) || x == "") return(NA)
+      ram_values <- as.numeric(gsub("[^0-9]", "", unlist(strsplit(x, "/"))))
+      max(ram_values, na.rm = TRUE)
+    }),
+    battery_numeric = as.numeric(gsub("[^0-9]", "", battery))
+  )
 
+# Define the filtering function
+filter_phones <- function(data, brand_input = NULL, os_type_input = NULL, release_date_input = NULL, 
+                          storage_min = NULL, storage_max = NULL, 
+                          display_min = NULL, display_max = NULL, 
+                          camera_min = NULL, camera_max = NULL, 
+                          ram_min = NULL, ram_max = NULL, 
+                          battery_min = NULL, battery_max = NULL) {
+  data %>%
+    filter((is.null(brand_input) | brand == brand_input) &
+             (is.null(os_type_input) | os_category == os_type_input) &
+             (is.null(release_date_input) | release_date_numeric >= release_date_input) &
+             (is.null(storage_min) | is.na(storage_numeric) | storage_numeric >= storage_min) &
+             (is.null(storage_max) | is.na(storage_numeric) | storage_numeric <= storage_max) &
+             (is.null(display_min) | is.na(display_size_numeric) | display_size_numeric >= display_min) &
+             (is.null(display_max) | is.na(display_size_numeric) | display_size_numeric <= display_max) &
+             (is.null(camera_min) | is.na(camera_numeric) | camera_numeric >= camera_min) &
+             (is.null(camera_max) | is.na(camera_numeric) | camera_numeric <= camera_max) &
+             (is.null(ram_min) | is.na(ram_numeric) | ram_numeric >= ram_min) &
+             (is.null(ram_max) | is.na(ram_numeric) | ram_numeric <= ram_max) &
+             (is.null(battery_min) | is.na(battery_numeric) | battery_numeric >= battery_min) &
+             (is.null(battery_max) | is.na(battery_numeric) | battery_numeric <= battery_max)) %>%
+    arrange(desc(release_date_numeric))
+}
 
 ui <- fluidPage(
+  tags$head(tags$style(HTML("
+    .card { margin-bottom: 15px; flex: 0 0 30%; box-sizing: border-box; }
+    .card-img-top { width: 100%; height: auto; }
+    .card-title a { text-decoration: none; color: #007bff; }
+    .card-title a:hover { text-decoration: underline; }
+    .card-body { padding: 10px; }
+    .card-deck { display: flex; flex-wrap: wrap; justify-content: space-around; }
+  "))),
   theme = shinytheme("darkly"),
-  titlePanel("Smartphone Master"),
+  titlePanel("PhoneVista"),
   
   tabsetPanel(
     tabPanel("All Phones",
@@ -64,7 +120,7 @@ ui <- fluidPage(
                           )
                         )
                ),
-               tabPanel("Brand Dominance across years",
+               tabPanel("Visualizing Trends",
                         sidebarLayout(
                           sidebarPanel(
                             sliderInput("Dominance_year",
@@ -99,9 +155,9 @@ ui <- fluidPage(
         sidebarPanel(
           h3(strong("Select 1st Phone")),
           selectInput("compare_brand1",
-                             "Select Brand: ",
-                             choices = unique(MainData$brand),
-                             selected = c("Oneplus")),
+                      "Select Brand: ",
+                      choices = unique(MainData$brand),
+                      selected = c("Oneplus")),
           sliderInput("compare_year1",
                       "Release Year: ",
                       min = min(MainData$release_date),
@@ -110,12 +166,12 @@ ui <- fluidPage(
           selectInput("compare_model1",
                       "Select Model: ",
                       choices = NULL),
-       
+          
           h3(strong("Select 2nd Phone")),
           selectInput("compare_brand2",
-                             "Select Brand: ",
-                             choices = unique(MainData$brand),
-                             selected = c("Oneplus")),
+                      "Select Brand: ",
+                      choices = unique(MainData$brand),
+                      selected = c("Oneplus")),
           sliderInput("compare_year2",
                       "Release Year: ",
                       min = min(MainData$release_date),
@@ -124,7 +180,7 @@ ui <- fluidPage(
           selectInput("compare_model2",
                       "Select Model: ",
                       choices = NULL)
-        
+          
         ),
         mainPanel(
           fluidRow(
@@ -135,7 +191,27 @@ ui <- fluidPage(
           dataTableOutput("compare_table")
         )
       )
-    )
+    ),
+    tabPanel("Phone Suggester",
+             sidebarLayout(
+               sidebarPanel(
+                 selectInput("brand", "Brand", choices = c( sort(unique(phones_data$brand)))),
+                 selectInput("os_type", "Operating System", choices = c( sort(unique(phones_data$os_category))), selected = "Any"),
+                 numericInput("release_date", "Release Year (From)", value = 2020, min = 2000, max = 2024),
+                 numericInput("storage_min", "Min Storage (GB)", value = 128),
+                 numericInput("storage_max", "Max Storage (GB)", value = 1024),
+                 numericInput("display_min", "Min Display Size (inches)", value = 5.5),
+                 numericInput("display_max", "Max Display Size (inches)", value = 7.0),
+                 numericInput("camera_min", "Min Camera Resolution (MP)", value = 12),
+                 numericInput("camera_max", "Max Camera Resolution (MP)", value = 108),
+                 sliderInput("ram_range", "RAM (GB)", min = 2, max = 16, value = c(4, 12), step = 1),
+                 numericInput("battery_min", "Min Battery Capacity (mAh)", value = 3000),
+                 numericInput("battery_max", "Max Battery Capacity (mAh)", value = 5000),
+                 actionButton("apply_filters", "Apply Filters")
+               ),
+               mainPanel(uiOutput("filtered_phones_ui"))
+             )
+    ),
   )
 )
 
@@ -218,14 +294,14 @@ server <- function(input, output, session) {
   
   # Plot brand dominance across years in Brand Dominance across years tab
   output$Dominance_plot <- renderPlot({
-
+    
     gg_plot_data <- Top_phone_data %>%
       filter(year >= input$Dominance_year[1] & year <= input$Dominance_year[2]) %>%
       group_by(year, brand_name) %>%
       summarise(phone_count = n()) %>%
       ungroup()
     
-
+    
     ggplot(gg_plot_data, aes(x = year, y = phone_count, color = brand_name, group = brand_name)) +
       geom_line(size = 0.5) +
       geom_point(size = 2) +
@@ -300,9 +376,9 @@ server <- function(input, output, session) {
         theme(
           axis.text.x = element_text(angle = 45, hjust = 1)
         )
-  
-  }
-    })
+      
+    }
+  })
   observeEvent(list(input$compare_brand1, input$compare_year1), {
     updateSelectInput(session, "compare_model1", 
                       choices = subset(MainData, 
@@ -347,6 +423,52 @@ server <- function(input, output, session) {
     
     
     compare_phones_data  # Return the transposed data frame
+  })
+  filtered_phones <- eventReactive(input$apply_filters, {
+    filter_phones(
+      data = phones_data,
+      brand_input = if (input$brand != "Any") input$brand else NULL,
+      os_type_input = if (input$os_type != "Any") input$os_type else NULL,
+      release_date_input = input$release_date,
+      storage_min = input$storage_min,
+      storage_max = input$storage_max,
+      display_min = input$display_min,
+      display_max = input$display_max,
+      camera_min = input$camera_min,
+      camera_max = input$camera_max,
+      ram_min = input$ram_range[1],
+      ram_max = input$ram_range[2],
+      battery_min = input$battery_min,
+      battery_max = input$battery_max
+    )
+  })
+  
+  output$filtered_phones_ui <- renderUI({
+    phones <- filtered_phones()
+    
+    if (nrow(phones) == 0) {
+      return(h4("No phones match the selected criteria."))
+    }
+    
+    phone_cards <- lapply(1:nrow(phones), function(i) {
+      phone <- phones[i, ]
+      tags$div(class = "card mb-3",
+               tags$img(src = phone$image_link, class = "card-img-top", alt = phone$device_name),
+               tags$div(class = "card-body",
+                        tags$h5(class = "card-title", tags$a(href = phone$phone_url, target = "_blank", phone$device_name)),
+                        tags$p(class = "card-text", paste("Brand:", phone$brand)),
+                        tags$p(class = "card-text", paste("OS:", phone$os_type)),
+                        tags$p(class = "card-text", paste("Storage:", phone$storage)),
+                        tags$p(class = "card-text", paste("Display Size:", phone$display_size)),
+                        tags$p(class = "card-text", paste("Display Resolution:", phone$display_resolution)),
+                        tags$p(class = "card-text", paste("Camera:", phone$camera)),
+                        tags$p(class = "card-text", paste("RAM:", phone$ram)),
+                        tags$p(class = "card-text", paste("Battery:", phone$battery))
+               )
+      )
+    })
+    
+    tags$div(class = "card-deck", do.call(tagList, phone_cards))
   })
 }
 
